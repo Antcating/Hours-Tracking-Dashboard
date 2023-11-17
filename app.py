@@ -1,8 +1,11 @@
+import json
+import os
 import sys
 from PyQt5.QtGui import QKeyEvent
 from PyQt5.QtWidgets import (
     QApplication,
     QMainWindow,
+    QDialog,
     QWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -11,13 +14,14 @@ from PyQt5.QtWidgets import (
     QLabel,
     QPushButton,
     QHeaderView,
-    QComboBox
+    QComboBox,
 )
 from PyQt5.QtCore import QTimer, QDate, Qt, QTime
 import matplotlib.pyplot as plt
 import seaborn as sns
 import datetime
 
+from settings import SettingsWindow
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -42,9 +46,66 @@ class MainWindow(QMainWindow):
 
         # Set up UI
         self.setup_ui()
-        
+
+        # Load saved data
+        self.load_data()
+        self.load_settings()
+
+    def load_data(self):
+        filename = f"{self.selected_year}-{self.selected_month}.json"
+        if os.path.exists(filename):
+            with open(filename, "r") as f:
+                data = json.load(f)
+            for i in range(self.table.rowCount() - 1):
+                date = self.table.item(i, 0).text()
+                if date in data:
+                    time_worked = data[date]
+                    self.table.setItem(i, 1, QTableWidgetItem(time_worked))
+                    # update the timer if the current day is being edited
+                    if self.current_month == self.selected_month and self.current_year == self.selected_year:
+                        if self.current_date.toString("dd/MM/yyyy") == date:
+                            self.timer_label.setText(time_worked)
+                            self.editing_today_cell = False
+
+    def load_settings(self):
+        if os.path.exists("settings.json"):
+            with open("settings.json", "r") as f:
+                settings = json.load(f)
+            self.max_hours_per_day = settings.get("max_hours_per_day", 8)
+            self.weekend_days = settings.get("weekend_days", [5, 6])
+        else:
+            self.max_hours_per_day = 8
+            self.weekend_days = [5, 6]
+
+    def save_settings(self):
+        settings = {
+            "max_hours_per_day": self.max_hours_per_day,
+            "weekend_days": self.weekend_days
+        }
+        with open("settings.json", "w") as f:
+            json.dump(settings, f)
+
+
+    def save_data(self):
+        data = {}
+        for i in range(self.table.rowCount() - 1):
+            date = self.table.item(i, 0).text()
+            time_worked = self.table.item(i, 1).text()
+            if time_worked:
+                data[date] = time_worked
+        filename = f"{self.selected_year}-{self.selected_month}.json"
+        with open(filename, "w") as f:
+            json.dump(data, f)
 
     def setup_ui(self):
+        menu_bar = self.menuBar()
+        # Create "File" menu
+        file_menu = menu_bar.addMenu("File")
+
+        # Create "Settings" menu item
+        settings_action = file_menu.addAction("Settings")
+        settings_action.triggered.connect(self.show_settings)
+
         # Create combo boxes for month and year selection
         self.month_combo = QComboBox()
         self.month_combo.addItems(["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"])
@@ -118,6 +179,9 @@ class MainWindow(QMainWindow):
         central_widget.setLayout(main_layout)
         self.setCentralWidget(central_widget)
 
+    def show_settings(self):
+        settings_window = SettingsWindow()
+        settings_window.exec_()
 
     def toggle_graph_visibility(self):
         window_ratio = self.width() / self.height()
@@ -127,17 +191,19 @@ class MainWindow(QMainWindow):
                 self.show_graph_button.setText("Show Graph")
                 self.table.show()
             else:
+                self.plot_hours_worked()
                 self.graph.canvas.show()
                 self.show_graph_button.setText("Hide Graph")
                 self.table.hide()
         else:
             if self.graph.canvas.isVisible():
                 self.graph.canvas.hide()
-                self.show_graph_button.setText("Hide Graph")
+                self.show_graph_button.setText("Show Graph")
                 self.table.show()
             else:
                 self.graph.canvas.show()
-                self.show_graph_button.setText("Show Graph")
+                self.plot_hours_worked()
+                self.show_graph_button.setText("Hide Graph")
                 self.table.show()
 
     def keyPressEvent(self, event: QKeyEvent | None) -> None:
@@ -153,12 +219,24 @@ class MainWindow(QMainWindow):
             self.close()
 
     def month_changed(self):
+        self.table.blockSignals(True)
         self.selected_month = self.month_combo.currentIndex() + 1
         self.populate_table()
+        self.load_data()
+        self.recalculate_total_worked()
+        if self.graph.canvas.isVisible():
+            self.plot_hours_worked()
+        self.table.blockSignals(False)
 
     def year_changed(self):
+        self.table.blockSignals(True)
         self.selected_year = int(self.year_combo.currentText())
         self.populate_table()
+        self.load_data()
+        self.recalculate_total_worked()
+        if self.graph.canvas.isVisible():
+            self.plot_hours_worked()
+        self.table.blockSignals(False)
 
     def set_timer(self):
         if self.timer.isActive():
@@ -206,6 +284,7 @@ class MainWindow(QMainWindow):
                 time_worked = time_worked_item.text()
                 if time_worked:
                     time_worked_item.setText(new_time)
+                    self.save_data()
 
     def cell_changed(self, row, column):
         if column == 1:
@@ -233,13 +312,16 @@ class MainWindow(QMainWindow):
 
             if new_time != update_time.text():
                 update_time.setText(new_time)
-                if self.current_date.toString("dd/MM/yyyy") == self.table.item(row, 0).text():
-                    # if the current day is being edited, update the timer
-                    self.editing_today_cell = False
-                    self.timer_label.setText(new_time)
+                # update the timer if the current day is being edited
+                if self.current_month == self.selected_month and self.current_year == self.selected_year:
+                    if self.current_date.toString("dd/MM/yyyy") == self.table.item(row, 0).text():
+                        self.timer_label.setText(new_time)
+                        self.editing_today_cell = False
 
             self.recalculate_total_worked()
-            self.plot_hours_worked()
+            if self.graph.canvas.isVisible():
+                self.plot_hours_worked()
+            self.save_data()
 
     def cell_double_clicked(self, row, column):
         if self.current_date.toString("dd/MM/yyyy") == self.table.item(row, 0).text():
@@ -247,7 +329,7 @@ class MainWindow(QMainWindow):
         
 
     def recalculate_total_worked(self):
-        return
+
         total_worked = 0
         for i in range(self.table.rowCount() - 1):
             time_worked = self.table.item(i, 1).text()
@@ -278,10 +360,11 @@ class MainWindow(QMainWindow):
             if self.current_date.toString("dd/MM/yyyy") == self.table.item(cell.row(), 0).text():
                 self.timer_label.setText("00:00:00")
         self.recalculate_total_worked()
-        self.plot_hours_worked()
+        if self.graph.canvas.isVisible():
+            self.plot_hours_worked()
+        self.save_data()
 
     def populate_table(self):
-        self.table.setUpdatesEnabled(False)
         self.table.clearContents()
         days_in_month = QDate(self.selected_year, self.selected_month, 1).daysInMonth()
         self.table.setRowCount(days_in_month + 1)  # add one row for the total
@@ -291,6 +374,8 @@ class MainWindow(QMainWindow):
             self.table.setItem(
                 i, 0, QTableWidgetItem(str(QDate.toString(date, "dd/MM/yyyy")))
             )
+            self.table.item(i, 0).setFlags(Qt.ItemIsEnabled)
+        
             self.table.setItem(i, 1, QTableWidgetItem("00:00:00"))
             day_of_month = date.day()
             if self.is_weekend(day_of_month):
@@ -320,9 +405,7 @@ class MainWindow(QMainWindow):
         )
         self.table.item(days_in_month, 0).setFlags(Qt.ItemIsEnabled)
         self.table.item(days_in_month, 1).setFlags(Qt.ItemIsEnabled)
-        self.table.setUpdatesEnabled(True)
     def plot_hours_worked(self):
-        return
         worked = []
         for i in range(self.table.rowCount()-1):
             time_worked = self.table.item(i, 1).text()
