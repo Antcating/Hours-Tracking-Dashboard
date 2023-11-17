@@ -11,6 +11,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QPushButton,
     QHeaderView,
+    QComboBox
 )
 from PyQt5.QtCore import QTimer, QDate, Qt, QTime
 import matplotlib.pyplot as plt
@@ -22,37 +23,56 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.current_date = QDate.currentDate() 
-        self.current_day = self.current_date.day()
-        self.editing_today_cell = False
-
         # Set window title and size
         self.setWindowTitle("Hours Tracking Dash")
         self.setGeometry(100, 100, 800, 600)
 
-        # Create timer widget
-        self.timer_label = QLabel("0:00:00")
-        self.timer_label.setAlignment(Qt.AlignCenter)
-        self.timer_label.setStyleSheet(
-            "font-size: 50px; font-weight: bold; border: 2px solid black; border-radius: 10px;"
-        )
+        # Set up date variables
+        self.current_date = QDate.currentDate() 
+        self.current_year = self.current_date.year()
+        self.current_month = self.current_date.month()
+        self.current_day = self.current_date.day()
+        self.selected_month = self.current_month
+        self.selected_year = self.current_year
+
+        # Set up timer
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_timer)
+        self.editing_today_cell = False
 
-        self.today_label = QLabel(self.current_date.toString("dddd, MMMM d"))
-        self.today_label.setAlignment(Qt.AlignCenter)
-        self.today_label.setStyleSheet(
-            "font-size: 20px; font-weight: bold; border: 2px solid black; border-radius: 10px;"
+        # Set up UI
+        self.setup_ui()
+        
+
+    def setup_ui(self):
+        # Create combo boxes for month and year selection
+        self.month_combo = QComboBox()
+        self.month_combo.addItems(["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"])
+        self.month_combo.setCurrentIndex(self.current_month - 1)
+        self.month_combo.currentIndexChanged.connect(self.month_changed)
+
+        self.year_combo = QComboBox()
+        self.year_combo.addItems([str(year) for year in range(2020, 2031)])
+        self.year_combo.setCurrentIndex(self.current_year - 2020)
+        self.year_combo.currentIndexChanged.connect(self.year_changed)
+
+        # Create labels for current date and timer
+        self.today_label = QLabel(self.current_date.toString("dddd, MMMM d, yyyy"))
+        self.today_label.setStyleSheet("font-size: 20px; font-weight: bold;")
+
+        self.timer_label = QLabel("00:00:00")
+        self.timer_label.setStyleSheet(
+            "font-size: 50px; font-weight: bold; border: 2px solid green; border-radius: 10px;"
         )
 
         # Create button to show/hide graph
         self.show_graph_button = QPushButton("Show Graph")
         self.show_graph_button.clicked.connect(self.toggle_graph_visibility)
 
-        # Create table widget
-        self.table: QTableWidget = QTableWidget()
-        self.table.setColumnCount(3)
-        self.table.setHorizontalHeaderLabels(["Day of the Month", "Time Worked", "Notes"])
+        # Create table to display hours worked
+        self.table = QTableWidget()
+        self.table.setColumnCount(2)
+        self.table.setHorizontalHeaderLabels(["Date", "Time Worked"])
         self.table.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.ResizeToContents
         )
@@ -75,6 +95,8 @@ class MainWindow(QMainWindow):
 
         # Add widgets to layout
         timer_layout = QHBoxLayout()
+        timer_layout.addWidget(self.month_combo)
+        timer_layout.addWidget(self.year_combo)
         timer_layout.addWidget(self.set_timer_button)
         timer_layout.addWidget(self.timer_label)
         timer_layout.addWidget(self.today_label)
@@ -95,6 +117,7 @@ class MainWindow(QMainWindow):
         central_widget = QWidget()
         central_widget.setLayout(main_layout)
         self.setCentralWidget(central_widget)
+
 
     def toggle_graph_visibility(self):
         window_ratio = self.width() / self.height()
@@ -128,6 +151,14 @@ class MainWindow(QMainWindow):
             self.toggle_graph_visibility()
         elif event.key() == Qt.Key_Escape:
             self.close()
+
+    def month_changed(self):
+        self.selected_month = self.month_combo.currentIndex() + 1
+        self.populate_table()
+
+    def year_changed(self):
+        self.selected_year = int(self.year_combo.currentText())
+        self.populate_table()
 
     def set_timer(self):
         if self.timer.isActive():
@@ -169,43 +200,46 @@ class MainWindow(QMainWindow):
         self.timer_label.setText(new_time)
         # update the time worked for the current day
         if self.editing_today_cell is False:
-            time_worked_item = self.table.item(self.current_day - 1, 1)
-            time_worked = time_worked_item.text()
-            if time_worked:
-                time_worked_item.setText(new_time)
+            # only update if current month and year are selected
+            if self.current_month == self.selected_month and self.current_year == self.selected_year:
+                time_worked_item = self.table.item(self.current_day - 1, 1)
+                time_worked = time_worked_item.text()
+                if time_worked:
+                    time_worked_item.setText(new_time)
 
     def cell_changed(self, row, column):
-        if row == self.table.rowCount() - 1:
-            return  # don't allow the total row to be edited
+        if column == 1:
+            if row == self.table.rowCount() - 1:
+                return  # don't allow the total row to be edited
 
-        update_time = self.table.item(row, column)
-        new_time = update_time.text()
+            update_time = self.table.item(row, column)
+            new_time = update_time.text()
 
-        if update_time.text() == "":
-            new_time = QTime(0, 0, 0).toString("hh:mm:ss")
+            if update_time.text() == "":
+                new_time = QTime(0, 0, 0).toString("hh:mm:ss")
 
 
-        elif update_time.text()[-1] == "s":
-            new_time = QTime(0, 0, int(update_time.text()[:-1])).toString("hh:mm:ss")
+            elif update_time.text()[-1] == "s":
+                new_time = QTime(0, 0, int(update_time.text()[:-1])).toString("hh:mm:ss")
 
-        elif update_time.text()[-1] == "m":
-            new_time = QTime(0, int(update_time.text()[:-1]), 0).toString("hh:mm:ss")
+            elif update_time.text()[-1] == "m":
+                new_time = QTime(0, int(update_time.text()[:-1]), 0).toString("hh:mm:ss")
 
-        elif update_time.text()[-1] == "h":
-            if int(update_time.text()[:-1]) > 24:
-                new_time = QTime(24, 0, 0).toString("hh:mm:ss")
-            else:
-                new_time = QTime(int(update_time.text()[:-1]), 0, 0).toString("hh:mm:ss")
+            elif update_time.text()[-1] == "h":
+                if int(update_time.text()[:-1]) > 24:
+                    new_time = QTime(24, 0, 0).toString("hh:mm:ss")
+                else:
+                    new_time = QTime(int(update_time.text()[:-1]), 0, 0).toString("hh:mm:ss")
 
-        if new_time != update_time.text():
-            update_time.setText(new_time)
-            if self.current_date.toString("dd/MM/yyyy") == self.table.item(row, 0).text():
-                # if the current day is being edited, update the timer
-                self.editing_today_cell = False
-                self.timer_label.setText(new_time)
+            if new_time != update_time.text():
+                update_time.setText(new_time)
+                if self.current_date.toString("dd/MM/yyyy") == self.table.item(row, 0).text():
+                    # if the current day is being edited, update the timer
+                    self.editing_today_cell = False
+                    self.timer_label.setText(new_time)
 
-        self.recalculate_total_worked()
-        self.plot_hours_worked()
+            self.recalculate_total_worked()
+            self.plot_hours_worked()
 
     def cell_double_clicked(self, row, column):
         if self.current_date.toString("dd/MM/yyyy") == self.table.item(row, 0).text():
@@ -213,6 +247,7 @@ class MainWindow(QMainWindow):
         
 
     def recalculate_total_worked(self):
+        return
         total_worked = 0
         for i in range(self.table.rowCount() - 1):
             time_worked = self.table.item(i, 1).text()
@@ -246,11 +281,13 @@ class MainWindow(QMainWindow):
         self.plot_hours_worked()
 
     def populate_table(self):
-        days_in_month = self.current_date.daysInMonth()
+        self.table.setUpdatesEnabled(False)
+        self.table.clearContents()
+        days_in_month = QDate(self.selected_year, self.selected_month, 1).daysInMonth()
         self.table.setRowCount(days_in_month + 1)  # add one row for the total
         total_worked = 0
         for i in range(days_in_month):
-            date = QDate(self.current_date.year(), self.current_date.month(), 1).addDays(i)
+            date = QDate(self.selected_year, self.selected_month, 1).addDays(i)
             self.table.setItem(
                 i, 0, QTableWidgetItem(str(QDate.toString(date, "dd/MM/yyyy")))
             )
@@ -259,7 +296,7 @@ class MainWindow(QMainWindow):
             if self.is_weekend(day_of_month):
                 for j in range(self.table.columnCount()):
                     if not self.table.item(i, j):
-                        self.table.setItem(i, j, QTableWidgetItem(""))
+                        self.table.setItem(i, j, QTableWidgetItem())
                     self.table.item(i, j).setBackground(Qt.lightGray)
             # else:
             time_worked = self.table.item(i, 1).text()
@@ -283,8 +320,9 @@ class MainWindow(QMainWindow):
         )
         self.table.item(days_in_month, 0).setFlags(Qt.ItemIsEnabled)
         self.table.item(days_in_month, 1).setFlags(Qt.ItemIsEnabled)
-
+        self.table.setUpdatesEnabled(True)
     def plot_hours_worked(self):
+        return
         worked = []
         for i in range(self.table.rowCount()-1):
             time_worked = self.table.item(i, 1).text()
