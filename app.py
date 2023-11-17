@@ -77,15 +77,6 @@ class MainWindow(QMainWindow):
             self.max_hours_per_day = 8
             self.weekend_days = [5, 6]
 
-    def save_settings(self):
-        settings = {
-            "max_hours_per_day": self.max_hours_per_day,
-            "weekend_days": self.weekend_days
-        }
-        with open("settings.json", "w") as f:
-            json.dump(settings, f)
-
-
     def save_data(self):
         data = {}
         for i in range(self.table.rowCount() - 1):
