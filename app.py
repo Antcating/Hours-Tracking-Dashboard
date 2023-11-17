@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sys
 from PyQt5.QtGui import QKeyEvent
 from PyQt5.QtWidgets import (
@@ -44,12 +45,14 @@ class MainWindow(QMainWindow):
         self.timer.timeout.connect(self.update_timer)
         self.editing_today_cell = False
 
+        # Load settings
+        self.load_settings()
+
         # Set up UI
         self.setup_ui()
 
         # Load saved data
         self.load_data()
-        self.load_settings()
 
     def load_data(self):
         filename = f"{self.selected_year}-{self.selected_month}.json"
@@ -59,8 +62,10 @@ class MainWindow(QMainWindow):
             for i in range(self.table.rowCount() - 1):
                 date = self.table.item(i, 0).text()
                 if date in data:
-                    time_worked = data[date]
-                    self.table.setItem(i, 1, QTableWidgetItem(time_worked))
+                    time_worked = data[date]["time_worked"]
+                    notes = data[date]["notes"]
+                    self.table.item(i, 1).setText(time_worked)
+                    self.table.item(i, 2).setText(notes)
                     # update the timer if the current day is being edited
                     if self.current_month == self.selected_month and self.current_year == self.selected_year:
                         if self.current_date.toString("dd/MM/yyyy") == date:
@@ -71,10 +76,10 @@ class MainWindow(QMainWindow):
         if os.path.exists("settings.json"):
             with open("settings.json", "r") as f:
                 settings = json.load(f)
-            self.max_hours_per_day = settings.get("max_hours_per_day", 8)
+            self.max_hours = settings.get("max_hours", 8)
             self.weekend_days = settings.get("weekend_days", [5, 6])
         else:
-            self.max_hours_per_day = 8
+            self.max_hours = 8
             self.weekend_days = [5, 6]
 
     def save_data(self):
@@ -82,8 +87,9 @@ class MainWindow(QMainWindow):
         for i in range(self.table.rowCount() - 1):
             date = self.table.item(i, 0).text()
             time_worked = self.table.item(i, 1).text()
-            if time_worked:
-                data[date] = time_worked
+            notes = self.table.item(i, 2).text()
+            if time_worked or notes:
+                data[date] = {"time_worked": time_worked, "notes": notes}
         filename = f"{self.selected_year}-{self.selected_month}.json"
         with open(filename, "w") as f:
             json.dump(data, f)
@@ -123,8 +129,8 @@ class MainWindow(QMainWindow):
 
         # Create table to display hours worked
         self.table = QTableWidget()
-        self.table.setColumnCount(2)
-        self.table.setHorizontalHeaderLabels(["Date", "Time Worked"])
+        self.table.setColumnCount(3)
+        self.table.setHorizontalHeaderLabels(["Date", "Time Worked", "Notes"])
         self.table.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.ResizeToContents
         )
@@ -172,7 +178,11 @@ class MainWindow(QMainWindow):
 
     def show_settings(self):
         settings_window = SettingsWindow()
-        settings_window.exec_()
+        if settings_window.exec_() == QDialog.Accepted:
+            self.load_settings()
+            self.table.blockSignals(True)
+            self.populate_table()
+            self.table.blockSignals(False)
 
     def toggle_graph_visibility(self):
         window_ratio = self.width() / self.height()
@@ -240,8 +250,8 @@ class MainWindow(QMainWindow):
 
     def is_weekend(self, day_of_month):
         date = QDate(self.current_date.year(), self.current_date.month(), day_of_month)
-        day_of_week = date.dayOfWeek()
-        if day_of_week == Qt.DayOfWeek.Saturday or day_of_week == Qt.DayOfWeek.Sunday:
+        day_of_week = date.dayOfWeek()-1
+        if day_of_week in self.weekend_days:
             return True
         else:
             return False
@@ -312,7 +322,7 @@ class MainWindow(QMainWindow):
             self.recalculate_total_worked()
             if self.graph.canvas.isVisible():
                 self.plot_hours_worked()
-            self.save_data()
+        self.save_data()
 
     def cell_double_clicked(self, row, column):
         if self.current_date.toString("dd/MM/yyyy") == self.table.item(row, 0).text():
@@ -368,12 +378,12 @@ class MainWindow(QMainWindow):
             self.table.item(i, 0).setFlags(Qt.ItemIsEnabled)
         
             self.table.setItem(i, 1, QTableWidgetItem("00:00:00"))
+            self.table.setItem(i, 2, QTableWidgetItem(""))
+
             day_of_month = date.day()
             if self.is_weekend(day_of_month):
                 for j in range(self.table.columnCount()):
-                    if not self.table.item(i, j):
-                        self.table.setItem(i, j, QTableWidgetItem())
-                    self.table.item(i, j).setBackground(Qt.lightGray)
+                    self.table.item(i, j).setBackground(Qt.darkGray)
             # else:
             time_worked = self.table.item(i, 1).text()
             if time_worked:
