@@ -21,7 +21,7 @@ To use the application, simply run `app.py`. The application will open a window 
 
 ## Code Structure
 
-The code is structured around a main `App` class, which handles the application logic. The `cell_changed` method, for example, is triggered when a cell in the table is edited. It updates the time worked based on the new input and saves the data.
+The code is structured around a main `MainWindow` class, which handles the application logic. The `cell_changed` method, for example, is triggered when a cell in the table is edited. It updates the time worked based on the new input and saves the data.
 
 ## Future Improvements
 
