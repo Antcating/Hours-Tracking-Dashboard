@@ -29,7 +29,7 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         # Set window title and size
-        self.setWindowTitle("Hours Tracking Dash")
+        self.setWindowTitle("Hours Tracking Dashboard")
         self.setGeometry(100, 100, 800, 600)
 
         # Set up date variables
