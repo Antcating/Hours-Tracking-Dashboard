@@ -1,6 +1,5 @@
 import json
 import os
-import re
 import sys
 from PyQt5.QtGui import QKeyEvent
 from PyQt5.QtWidgets import (
@@ -23,6 +22,7 @@ import seaborn as sns
 import datetime
 
 from settings import SettingsWindow
+from PyQt5.QtGui import QColor
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -249,7 +249,7 @@ class MainWindow(QMainWindow):
 
 
     def is_weekend(self, day_of_month):
-        date = QDate(self.current_date.year(), self.current_date.month(), day_of_month)
+        date = QDate(self.selected_year, self.selected_month, day_of_month)
         day_of_week = date.dayOfWeek()-1
         if day_of_week in self.weekend_days:
             return True
@@ -381,10 +381,13 @@ class MainWindow(QMainWindow):
             self.table.setItem(i, 2, QTableWidgetItem(""))
 
             day_of_month = date.day()
-            if self.is_weekend(day_of_month):
+            if self.current_date.toString("dd/MM/yyyy") == date.toString("dd/MM/yyyy"):
+                for j in range(self.table.columnCount()):
+                    # rbg dark green for modern design and dark mode: (0, 128, 0)
+                    self.table.item(i, j).setBackground(QColor(0, 100, 0))            
+            elif self.is_weekend(day_of_month):
                 for j in range(self.table.columnCount()):
                     self.table.item(i, j).setBackground(Qt.darkGray)
-            # else:
             time_worked = self.table.item(i, 1).text()
             if time_worked:
                 qtime_worked = QTime().fromString(time_worked, "hh:mm:ss")
