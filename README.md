@@ -19,6 +19,8 @@ I have developed this time tracking tool to help me manage my time more effectiv
 
 To use the application, simply run `app.py`. The application will open a window where you can log and view your time. To log time, enter the time worked in the appropriate format (e.g., "2h" for 2 hours) in the second column of the table. The application will automatically save your data.
 
+
+
 ## Code Structure
 
 The code is structured around a main `MainWindow` class, which handles the application logic. The `cell_changed` method, for example, is triggered when a cell in the table is edited. It updates the time worked based on the new input and saves the data.
@@ -29,3 +31,7 @@ Future improvements to the application could include:
 
 - Adding the ability to track time across multiple projects.
 - Improving the user interface for a more intuitive user experience.
+
+## Note
+
+Please note that this program has only been tested on Debian Linux with the KDE Breeze Dark theme. Compatibility with other operating systems or themes is not guaranteed.
